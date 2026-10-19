@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-950 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radio Comms & Gateway Dashboard</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,500;0,700;1,400&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        mono: ['"Share Tech Mono"', 'monospace'],
+                        display: ['"Chakra Petch"', 'sans-serif'],
+                    },
+                    colors: {
+                        amber: {
+                            400: '#f59e0b',
+                            500: '#d97706',
+                            900: '#78350f',
+                        },
+                        industrial: {
+                            800: '#1e293b',
+                            900: '#0f172a',
+                            950: '#080d1a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom LED Display glow & tactical styling */
+        .lcd-glow {
+            text-shadow: 0 0 10px rgba(245, 158, 11, 0.6), 0 0 20px rgba(245, 158, 11, 0.3);
+        }
+        .lcd-glow-green {
+            text-shadow: 0 0 10px rgba(34, 197, 94, 0.6);
+        }
+        .ptt-active {
+            box-shadow: 0 0 30px rgba(239, 68, 68, 0.8), inset 0 0 15px rgba(0, 0, 0, 0.5);
+            transform: scale(0.97);
+        }
+        .grid-pattern {
+            background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 0);
+            background-size: 16px 16px;
+        }
+        /* Custom Noise overlay for radio texture */
+        .speaker-grill {
+            background: radial-gradient(circle, #334155 20%, transparent 20%);
+            background-size: 6px 6px;
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col font-display antialiased select-none grid-pattern">
+
+    <!-- Top Navigation Bar -->
+    <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md px-4 py-3 flex items-center justify-between sticky top-0 z-50">
+        <div class="flex items-center space-x-3">
+            <div class="h-9 w-9 rounded-lg bg-amber-500/10 border border-amber-500/40 flex items-center justify-center text-amber-500 font-bold">
+                <i class="fa-solid fa-walkie-talkie text-xl"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg leading-tight tracking-wide text-slate-100 flex items-center gap-2">
+                    NEXUS COMM <span class="text-xs bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded border border-amber-500/30">v1.0-PRO</span>
+                </h1>
+                <p class="text-xs text-slate-400 font-mono">SISTEMA DE COMUNICACIÓN INTERNA</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-4">
+            <!-- Global Status Indicator -->
+            <div class="hidden sm:flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-full border border-slate-800">
+                <span id="system-status-dot" class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span id="system-status-text" class="text-xs font-mono text-slate-300">CANAL ACTIVO</span>
+            </div>
+
+            <!-- User Info / Station ID -->
+            <div class="text-right hidden md:block">
+                <div class="text-xs text-slate-400 font-mono">ESTACIÓN ID</div>
+                <div class="text-sm font-bold text-amber-400 font-mono" id="user-callsign">ESTACION-ALPHA-01</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        <!-- LEFT / MAIN COLUMN: Walkie-Talkie Tactical Unit (5 Cols) -->
+        <section class="lg:col-span-5 flex flex-col items-center">
+            
+            <!-- Walkie Talkie Shell -->
+            <div class="w-full max-w-md bg-slate-900 border-2 border-slate-800 rounded-3xl p-5 shadow-2xl relative overflow-hidden flex flex-col gap-5">
+                
+                <!-- Metallic Trim Top accent -->
+                <div class="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-1.5 bg-slate-700 rounded-b-md"></div>
+                
+                <!-- Antenna Graphic -->
+                <div class="absolute -top-12 left-8 w-4 h-16 bg-gradient-to-r from-slate-700 via-slate-800 to-slate-900 rounded-t-sm border-t border-slate-600"></div>
+
+                <!-- Header Knob Controls & LCD Screen Header -->
+                <div class="flex justify-between items-center pt-2 px-1">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-mono text-slate-400 font-bold uppercase tracking-wider"><i class="fa-solid fa-satellite-dish text-amber-500 mr-1"></i> Transceptor VHF</span>
+                    </div>
+                    <!-- Volume Level Indicator -->
+                    <div class="flex items-center gap-1.5 bg-slate-950 px-2 py-1 rounded border border-slate-800">
+                        <i class="fa-solid fa-volume-high text-xs text-amber-400"></i>
+                        <input type="range" id="volume-knob" min="0" max="100" value="80" class="w-16 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500">
+                    </div>
+                </div>
+
+                <!-- Digital LCD Screen -->
+                <div class="bg-slate-950 border-2 border-slate-800 rounded-2xl p-4 font-mono relative overflow-hidden shadow-inner">
+                    <!-- Scanline Overlay -->
+                    <div class="absolute inset-0 bg-gradient-to-b from-transparent via-amber-500/5 to-transparent pointer-events-none"></div>
+
+                    <!-- LCD Top Stats -->
+                    <div class="flex justify-between items-center text-xs text-amber-500/70 mb-2 border-b border-amber-500/20 pb-1">
+                        <span class="flex items-center gap-1"><i class="fa-solid fa-signal"></i> 100% SIG</span>
+                        <span id="lcd-mode-badge" class="bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded text-[10px] font-bold">RX READY</span>
+                        <span>UHF-868MHz</span>
+                    </div>
+
+                    <!-- Channel Number & Frequency Display -->
+                    <div class="text-center py-2">
+                        <div id="lcd-channel-name" class="text-3xl font-bold text-amber-400 lcd-glow tracking-wider">
+                            CANAL 01
+                        </div>
+                        <div id="lcd-freq" class="text-sm text-amber-500/80 tracking-widest mt-0.5">
+                            462.5625 MHz • [GENERAL]
+                        </div>
+                    </div>
+
+                    <!-- Visual Audio Waveform Display -->
+                    <div class="h-12 bg-slate-900/90 rounded border border-amber-500/20 mt-2 p-1 flex items-center justify-center gap-1 overflow-hidden" id="visualizer-container">
+                        <!-- Bars dynamically rendered via JS -->
+                        <div class="text-xs text-amber-500/50 font-sans italic">Presiona PTT para hablar...</div>
+                    </div>
+                </div>
+
+                <!-- Speaker Section -->
+                <div class="h-16 bg-slate-950 border border-slate-800 rounded-xl speaker-grill shadow-inner flex items-center justify-center">
+                    <div class="bg-slate-900/90 px-3 py-1 rounded-full border border-slate-800 text-[11px] text-slate-400 font-mono flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-slate-600" id="speaker-led"></span>
+                        SPEAKER DUPLEX C-01
+                    </div>
+                </div>
+
+                <!-- Channel Switch Selector (Quick Buttons) -->
+                <div>
+                    <label class="text-xs text-slate-400 font-mono mb-1.5 block">SELECCIONAR CANAL / SECTOR:</label>
+                    <div class="grid grid-cols-4 gap-2" id="channel-selector-grid">
+                        <!-- Rendered by JS -->
+                    </div>
+                </div>
+
+                <!-- MAIN PTT BUTTON AREA -->
+                <div class="flex flex-col items-center py-2">
+                    <button id="ptt-btn" class="w-40 h-40 rounded-full bg-gradient-to-b from-red-600 via-red-700 to-red-900 border-4 border-red-500/50 shadow-lg flex flex-col items-center justify-center text-white transition-all duration-150 active:ptt-active cursor-pointer group hover:border-red-400">
+                        <i class="fa-solid fa-microphone text-4xl mb-1 group-hover:scale-110 transition-transform"></i>
+                        <span class="font-bold text-lg tracking-wider">PTT</span>
+                        <span class="text-[10px] text-red-200 tracking-tight font-mono">MANTENER PARA HABLAR</span>
+                    </button>
+                </div>
+
+                <!-- Bottom Auxiliary Controls -->
+                <div class="grid grid-cols-2 gap-3 pt-1 border-t border-slate-800 text-xs font-mono">
+                    <button id="roger-beep-toggle" class="bg-slate-800 hover:bg-slate-700 text-slate-300 py-2 rounded-lg border border-slate-700 flex items-center justify-center gap-2 transition">
+                        <i class="fa-solid fa-bell text-amber-400"></i> Roger Beep: <span id="roger-status" class="text-emerald-400 font-bold">ON</span>
+                    </button>
+                    <button id="test-tone-btn" class="bg-slate-800 hover:bg-slate-700 text-slate-300 py-2 rounded-lg border border-slate-700 flex items-center justify-center gap-2 transition">
+                        <i class="fa-solid fa-bolt text-amber-400"></i> Tono de Prueba
+                    </button>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- RIGHT COLUMN: Dashboard, Active Channels & Logs (7 Cols) -->
+        <section class="lg:col-span-7 flex flex-col gap-6">
+
+            <!-- Active Channels & Active Personnel Panel -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+                <h2 class="text-sm font-mono text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-users text-amber-400"></i> Canales y Personal Conectado
+                </h2>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Channel list status -->
+                    <div class="bg-slate-950 border border-slate-800 rounded-xl p-3">
+                        <div class="text-xs font-mono text-slate-400 mb-2 font-bold">ESTADO DE FRECUENCIAS</div>
+                        <ul class="space-y-2 text-xs font-mono" id="channels-status-list">
+                            <!-- Populated by JS -->
+                        </ul>
+                    </div>
+
+                    <!-- Online Active Users in Channel -->
+                    <div class="bg-slate-950 border border-slate-800 rounded-xl p-3">
+                        <div class="text-xs font-mono text-slate-400 mb-2 font-bold">OPERADORES EN <span class="text-amber-400" id="current-channel-label">CANAL 01</span></div>
+                        <div class="space-y-2 text-xs" id="active-users-list">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Transmission Audit & Events Log -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex-1 flex flex-col min-h-[300px]">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-sm font-mono text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                        <i class="fa-solid fa-list-check text-amber-400"></i> Registro de Transmisiones de Voz
+                    </h2>
+                    <span class="text-xs text-slate-500 font-mono">Bitácora en Tiempo Real</span>
+                </div>
+
+                <!-- Log Container -->
+                <div id="transmission-log" class="bg-slate-950 border border-slate-800 rounded-xl p-3 flex-1 overflow-y-auto space-y-2 font-mono text-xs max-h-[280px]">
+                    <div class="text-slate-600 italic text-center py-6">Sistema iniciado. Esperando actividad de radio...</div>
+                </div>
+
+                <!-- Simulated Intercom Quick Alert Bar -->
+                <div class="mt-4 pt-3 border-t border-slate-800 flex items-center gap-2">
+                    <input type="text" id="alert-text-input" placeholder="Enviar mensaje rápido de texto a pantalla..." class="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-amber-500 text-slate-200">
+                    <button id="send-alert-btn" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-4 py-2 rounded-lg text-xs font-mono flex items-center gap-1 transition">
+                        <i class="fa-solid fa-paper-plane"></i> ENVIAR
+                    </button>
+                </div>
+            </div>
+
+            <!-- Future RFID Gateway Preview banner -->
+            <div class="bg-gradient-to-r from-amber-500/10 via-slate-900 to-slate-900 border border-amber-500/30 rounded-2xl p-4 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+                        <i class="fa-solid fa-microchip text-xl"></i>
+                    </div>
+                    <div>
+                        <div class="text-sm font-bold text-slate-200">Módulo RFID Gateway Integrado</div>
+                        <div class="text-xs text-slate-400 font-mono">Esperando hardware UHF 868MHz en puertas de salida.</div>
+                    </div>
+                </div>
+                <span class="text-xs bg-amber-500/20 text-amber-300 font-mono px-2.5 py-1 rounded-md border border-amber-500/30">FASE 2</span>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- Audio & Application Logic Script -->
+    <script>
+        // --- DATA & CONFIG ---
+        const CHANNELS = [
+            { id: 1, name: "CANAL 01", freq: "462.5625 MHz", label: "GENERAL / OPERACIONES", activeCount: 5 },
+            { id: 2, name: "CANAL 02", freq: "462.5875 MHz", label: "ALMACÉN & LOGÍSTICA", activeCount: 3 },
+            { id: 3, name: "CANAL 03", freq: "462.6125 MHz", label: "SEGURIDAD Y PUERTAS", activeCount: 2 },
+            { id: 4, name: "CANAL 04", freq: "462.6375 MHz", label: "MANTENIMIENTO", activeCount: 1 }
+        ];
+
+        const OPERATORS = {
+            1: [
+                { id: 'OP-101', name: 'Carlos Mendoza (Supervisión)', status: 'Online' },
+                { id: 'OP-102', name: 'Ana Torres (Logística)', status: 'Online' },
+                { id: 'OP-103', name: 'Estación Alpha 01 (Tú)', status: 'Online' }
+            ],
+            2: [
+                { id: 'OP-201', name: 'Ramiro Gómez (Montacargas)', status: 'Online' },
+                { id: 'OP-202', name: 'Jesús Silva (Inventario)', status: 'Busy' }
+            ],
+            3: [
+                { id: 'OP-301', name: 'Oficial Puerta Estacionamiento', status: 'Online' },
+                { id: 'OP-302', name: 'Oficial Planta Baja', status: 'Online' }
+            ],
+            4: [
+                { id: 'OP-401', name: 'Soporte Técnico', status: 'Online' }
+            ]
+        };
+
+        let currentChannelId = 1;
+        let isTransmitting = false;
+        let rogerBeepEnabled = true;
+        let audioCtx = null;
+        let micStream = null;
+        let analyser = null;
+        let visualizerAnimId = null;
+
+        // UI Element References
+        const pttBtn = document.getElementById('ptt-btn');
+        const lcdChannelName = document.getElementById('lcd-channel-name');
+        const lcdFreq = document.getElementById('lcd-freq');
+        const lcdModeBadge = document.getElementById('lcd-mode-badge');
+        const visualizerContainer = document.getElementById('visualizer-container');
+        const transmissionLog = document.getElementById('transmission-log');
+        const rogerStatusText = document.getElementById('roger-status');
+        const channelSelectorGrid = document.getElementById('channel-selector-grid');
+        const activeUsersList = document.getElementById('active-users-list');
+        const currentChannelLabel = document.getElementById('current-channel-label');
+        const channelsStatusList = document.getElementById('channels-status-list');
+        const speakerLed = document.getElementById('speaker-led');
+
+        // Initialize App
+        window.addEventListener('DOMContentLoaded', () => {
+            renderChannelSelectors();
+            renderChannelsStatus();
+            selectChannel(1);
+            setupPTTListeners();
+            setupAuxControls();
+            
+            // Add initial log
+            addLogEntry('SISTEMA', 'Inicialización de transceptor de radio completada.', 'system');
+        });
+
+        // Audio Context Lazy Initialization
+        function getAudioContext() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            return audioCtx;
+        }
+
+        // Render Channel Grid Selector Buttons
+        function renderChannelSelectors() {
+            channelSelectorGrid.innerHTML = '';
+            CHANNELS.forEach(ch => {
+                const btn = document.createElement('button');
+                btn.className = `py-2 rounded-lg font-mono text-xs font-bold border transition flex flex-col items-center justify-center ${
+                    ch.id === currentChannelId 
+                    ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md' 
+                    : 'bg-slate-950 hover:bg-slate-800 text-slate-300 border-slate-800'
+                }`;
+                btn.innerHTML = `CH-0${ch.id}`;
+                btn.onclick = () => selectChannel(ch.id);
+                channelSelectorGrid.appendChild(btn);
+            });
+        }
+
+        // Render Channels Overview Panel
+        function renderChannelsStatus() {
+            channelsStatusList.innerHTML = '';
+            CHANNELS.forEach(ch => {
+                const li = document.createElement('li');
+                li.className = 'flex items-center justify-between p-1.5 rounded bg-slate-900 border border-slate-800/80';
+                li.innerHTML = `
+                    <span class="${ch.id === currentChannelId ? 'text-amber-400 font-bold' : 'text-slate-300'}">
+                        CH-0${ch.id} (${ch.label})
+                    </span>
+                    <span class="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-400">
+                        ${ch.activeCount} Op.
+                    </span>
+                `;
+                channelsStatusList.appendChild(li);
+            });
+        }
+
+        // Switch Active Radio Channel
+        function selectChannel(id) {
+            if (isTransmitting) return;
+
+            currentChannelId = id;
+            const channel = CHANNELS.find(c => c.id === id);
+
+            lcdChannelName.textContent = channel.name;
+            lcdFreq.textContent = `${channel.freq} • [${channel.label}]`;
+            currentChannelLabel.textContent = channel.name;
+
+            renderChannelSelectors();
+            renderChannelsStatus();
+            renderActiveUsers(id);
+
+            // Play channel switch click sound
+            playBeepSound(800, 0.05, 'square');
+            addLogEntry('CANAL', `Sintonizado en ${channel.name} (${channel.freq})`, 'channel');
+        }
+
+        // Render User List for Current Channel
+        function renderActiveUsers(channelId) {
+            activeUsersList.innerHTML = '';
+            const users = OPERATORS[channelId] || [];
+            
+            users.forEach(u => {
+                const item = document.createElement('div');
+                item.className = 'flex items-center justify-between p-2 rounded bg-slate-900 border border-slate-800';
+                item.innerHTML = `
+                    <div class="flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full ${u.status === 'Online' ? 'bg-emerald-500' : 'bg-amber-500'}"></span>
+                        <span class="font-bold text-slate-200">${u.name}</span>
+                    </div>
+                    <span class="font-mono text-[10px] text-slate-500">${u.id}</span>
+                `;
+                activeUsersList.appendChild(item);
+            });
+        }
+
+        // --- PTT & MICROPHONE LOGIC ---
+        function setupPTTListeners() {
+            // Mouse Events
+            pttBtn.addEventListener('mousedown', startTransmission);
+            window.addEventListener('mouseup', stopTransmission);
+
+            // Touch Events for Mobile
+            pttBtn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                startTransmission();
+            });
+            window.addEventListener('touchend', stopTransmission);
+
+            // Keyboard Spacebar / Key 'T' Push-To-Talk shortcut
+            window.addEventListener('keydown', (e) => {
+                if ((e.code === 'Space' || e.code === 'KeyT') && !isTransmitting && e.target.tagName !== 'INPUT') {
+                    e.preventDefault();
+                    startTransmission();
+                }
+            });
+            window.addEventListener('keyup', (e) => {
+                if ((e.code === 'Space' || e.code === 'KeyT') && isTransmitting && e.target.tagName !== 'INPUT') {
+                    e.preventDefault();
+                    stopTransmission();
+                }
+            });
+        }
+
+        async function startTransmission() {
+            if (isTransmitting) return;
+            isTransmitting = true;
+
+            const ctx = getAudioContext();
+
+            // UI updates
+            pttBtn.classList.add('ptt-active');
+            lcdModeBadge.textContent = 'TX ACTIVE';
+            lcdModeBadge.className = 'bg-red-500 text-white px-1.5 py-0.5 rounded text-[10px] font-bold animate-pulse';
+            speakerLed.className = 'w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_#ef4444]';
+
+            // Play Mic PTT Turn On Squelch Beep
+            playPttSquelch(true);
+
+            // Request Microphone Access
+            try {
+                micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                const source = ctx.createMediaStreamSource(micStream);
+                analyser = ctx.createAnalyser();
+                analyser.fftSize = 32;
+                source.connect(analyser);
+
+                // Start Visualizer Loop
+                drawVisualizerBars();
+            } catch (err) {
+                console.warn('Microphone access denied or unequipped:', err);
+                renderSimulatedWaveform();
+            }
+
+            addLogEntry('TRANSMISIÓN', `Estación Alpha iniciada en ${CHANNELS.find(c => c.id === currentChannelId).name}`, 'tx');
+        }
+
+        function stopTransmission() {
+            if (!isTransmitting) return;
+            isTransmitting = false;
+
+            // Stop Microphone Stream
+            if (micStream) {
+                micStream.getTracks().forEach(track => track.stop());
+                micStream = null;
+            }
+
+            if (visualizerAnimId) {
+                cancelAnimationFrame(visualizerAnimId);
+            }
+
+            // UI Updates
+            pttBtn.classList.remove('ptt-active');
+            lcdModeBadge.textContent = 'RX READY';
+            lcdModeBadge.className = 'bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded text-[10px] font-bold';
+            speakerLed.className = 'w-2 h-2 rounded-full bg-slate-600';
+
+            // Visualizer Reset
+            visualizerContainer.innerHTML = '<div class="text-xs text-amber-500/50 font-sans italic">Presiona PTT para hablar...</div>';
+
+            // Play Roger Beep if enabled
+            if (rogerBeepEnabled) {
+                setTimeout(() => playRogerBeep(), 100);
+            }
+
+            addLogEntry('TRANSMISIÓN', `Fin de transmisión.`, 'rx');
+        }
+
+        // --- AUDIO SYNTHESIS & SOUND EFFECTS ---
+        function playBeepSound(freq = 1000, duration = 0.08, type = 'sine') {
+            try {
+                const ctx = getAudioContext();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, ctx.currentTime);
+
+                const volume = document.getElementById('volume-knob').value / 100;
+                gain.gain.setValueAtTime(volume * 0.3, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+
+                osc.start();
+                osc.stop(ctx.currentTime + duration);
+            } catch(e) { }
+        }
+
+        function playPttSquelch(start = true) {
+            try {
+                const ctx = getAudioContext();
+                const now = ctx.currentTime;
+                
+                // Frequency burst for tactical sound
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                const volume = document.getElementById('volume-knob').value / 100;
+
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(start ? 600 : 400, now);
+                osc.frequency.exponentialRampToValueAtTime(start ? 1200 : 200, now + 0.06);
+
+                gain.gain.setValueAtTime(volume * 0.2, now);
+                gain.gain.linearRampToValueAtTime(0.001, now + 0.06);
+
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.06);
+            } catch(e) {}
+        }
+
+        function playRogerBeep() {
+            try {
+                const ctx = getAudioContext();
+                const now = ctx.currentTime;
+                const volume = document.getElementById('volume-knob').value / 100;
+
+                const osc1 = ctx.createOscillator();
+                const osc2 = ctx.createOscillator();
+                const gain = ctx.createGain();
+
+                osc1.type = 'sine';
+                osc2.type = 'sine';
+
+                // Dual tone roger beep (1200Hz then 880Hz)
+                osc1.frequency.setValueAtTime(1200, now);
+                osc1.frequency.setValueAtTime(880, now + 0.07);
+
+                gain.gain.setValueAtTime(volume * 0.25, now);
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+
+                osc1.connect(gain);
+                gain.connect(ctx.destination);
+
+                osc1.start(now);
+                osc1.stop(now + 0.18);
+            } catch(e) {}
+        }
+
+        // --- VISUALIZER DRAWING ---
+        function drawVisualizerBars() {
+            if (!isTransmitting || !analyser) return;
+
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyser.getByteFrequencyData(dataArray);
+
+            visualizerContainer.innerHTML = '';
+            for (let i = 0; i < 16; i++) {
+                const barHeight = Math.max(4, (dataArray[i] / 255) * 40);
+                const bar = document.createElement('div');
+                bar.className = 'w-1.5 bg-amber-400 rounded-full transition-all duration-75';
+                bar.style.height = `${barHeight}px`;
+                visualizerContainer.appendChild(bar);
+            }
+
+            visualizerAnimId = requestAnimationFrame(drawVisualizerBars);
+        }
+
+        function renderSimulatedWaveform() {
+            if (!isTransmitting) return;
+
+            visualizerContainer.innerHTML = '';
+            for (let i = 0; i < 16; i++) {
+                const randomHeight = Math.floor(Math.random() * 32) + 6;
+                const bar = document.createElement('div');
+                bar.className = 'w-1.5 bg-amber-400 rounded-full transition-all duration-100';
+                bar.style.height = `${randomHeight}px`;
+                visualizerContainer.appendChild(bar);
+            }
+
+            visualizerAnimId = setTimeout(renderSimulatedWaveform, 100);
+        }
+
+        // --- AUXILIARY CONTROLS & LOGGING ---
+        function setupAuxControls() {
+            // Roger Beep Toggle
+            const rogerBtn = document.getElementById('roger-beep-toggle');
+            rogerBtn.onclick = () => {
+                rogerBeepEnabled = !rogerBeepEnabled;
+                rogerStatusText.textContent = rogerBeepEnabled ? 'ON' : 'OFF';
+                rogerStatusText.className = rogerBeepEnabled ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold';
+                playBeepSound(1000, 0.05);
+            };
+
+            // Test Tone Button
+            document.getElementById('test-tone-btn').onclick = () => {
+                playBeepSound(1000, 0.3, 'sine');
+                addLogEntry('PRUEBA', 'Tono de prueba de frecuencia emitido.', 'system');
+            };
+
+            // Send Quick Intercom Alert
+            const sendAlertBtn = document.getElementById('send-alert-btn');
+            const alertInput = document.getElementById('alert-text-input');
+
+            const sendAlert = () => {
+                const val = alertInput.value.trim();
+                if (val) {
+                    addLogEntry('MENSAJE', val, 'tx');
+                    alertInput.value = '';
+                    playBeepSound(1400, 0.1, 'triangle');
+                }
+            };
+
+            sendAlertBtn.onclick = sendAlert;
+            alertInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') sendAlert();
+            });
+        }
+
+        // Add Log Record to Audit Panel
+        function addLogEntry(tag, message, type = 'system') {
+            const now = new Date();
+            const timeStr = now.toTimeString().split(' ')[0];
+
+            const entry = document.createElement('div');
+            entry.className = 'p-2 rounded border flex items-start gap-2 text-xs font-mono';
+
+            if (type === 'tx') {
+                entry.className += ' bg-red-950/30 border-red-800/40 text-red-200';
+            } else if (type === 'rx') {
+                entry.className += ' bg-emerald-950/30 border-emerald-800/40 text-emerald-200';
+            } else if (type === 'channel') {
+                entry.className += ' bg-amber-950/30 border-amber-800/40 text-amber-200';
+            } else {
+                entry.className += ' bg-slate-900 border-slate-800 text-slate-300';
+            }
+
+            entry.innerHTML = `
+                <span class="text-slate-500 font-bold text-[10px] pt-0.5">[${timeStr}]</span>
+                <span class="font-bold px-1 rounded text-[10px] uppercase ${
+                    type === 'tx' ? 'bg-red-500/20 text-red-400' :
+                    type === 'rx' ? 'bg-emerald-500/20 text-emerald-400' :
+                    type === 'channel' ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-800 text-slate-400'
+                }">${tag}</span>
+                <span class="flex-1">${message}</span>
+            `;
+
+            // Clear empty placeholder
+            if (transmissionLog.children.length === 1 && transmissionLog.children[0].classList.contains('italic')) {
+                transmissionLog.innerHTML = '';
+            }
+
+            transmissionLog.appendChild(entry);
+            transmissionLog.scrollTop = transmissionLog.scrollHeight;
+        }
+    </script>
+</body>
+</html>
