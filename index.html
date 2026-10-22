@@ -331,7 +331,6 @@
             channelPeers.clear();
             updateActiveUsersUI();
 
-            // ID único basado en sello de tiempo para prevenir colisiones entre pestañas
             const uniqueId = Math.random().toString(36).substring(2, 7);
             const fullPeerId = `nexus-ch${channelId}-${myCallsign}-${uniqueId}`;
 
@@ -352,13 +351,13 @@
                 syncBroadcastPresence();
             });
 
-            // Recibir transmisiones de audio entrantes de otros usuarios
+            // Recibir llamadas de audio de otros pares
             peer.on('call', (call) => {
-                call.answer(); // Aceptar transmisión
+                call.answer(); // Auto-aceptar la llamada entrante
                 handleIncomingStream(call);
             });
 
-            // Recibir mensajes de texto por WebRTC DataChannel
+            // Recibir canales de datos para chat/texto
             peer.on('connection', (conn) => {
                 setupDataConnection(conn);
             });
@@ -385,12 +384,11 @@
             });
         }
 
-        // Sincronizar presencia de usuarios mediante BroadcastChannel local y mensajes globales
+        // Sincronización de presencia con BroadcastChannel y WebRTC
         function syncBroadcastPresence() {
             const channelName = `nexus_comm_bc_ch_${currentChannelId}`;
             const bc = new BroadcastChannel(channelName);
 
-            // Anunciar mi llegada
             bc.postMessage({ type: 'JOIN', callsign: myCallsign, peerId: myPeerId });
 
             bc.onmessage = (e) => {
@@ -414,11 +412,18 @@
             };
         }
 
-        // Manejar audio entrante de un peer
+        // Manejar audio entrante
         function handleIncomingStream(call) {
             activeCalls[call.peer] = call;
             const parts = call.peer.split('-');
             const callerCallsign = parts.length > 2 ? parts[2] : 'OPERADOR';
+
+            // Registrar al emisor si no estaba en la lista
+            if (!channelPeers.has(call.peer)) {
+                channelPeers.set(call.peer, callerCallsign);
+                updateActiveUsersUI();
+                renderChannelsStatus();
+            }
 
             call.on('stream', (remoteStream) => {
                 let audioEl = document.getElementById('audio-' + call.peer);
@@ -519,7 +524,6 @@
         function updateActiveUsersUI() {
             activeUsersList.innerHTML = '';
             
-            // Agregarme a mí
             const myItem = document.createElement('div');
             myItem.className = 'flex items-center justify-between p-2 rounded bg-slate-900 border border-slate-800';
             myItem.innerHTML = `
@@ -531,7 +535,6 @@
             `;
             activeUsersList.appendChild(myItem);
 
-            // Agregar pares remotos
             channelPeers.forEach((callsign, pId) => {
                 const item = document.createElement('div');
                 item.className = 'flex items-center justify-between p-2 rounded bg-slate-900 border border-slate-800';
@@ -579,7 +582,6 @@
 
             const ctx = getAudioContext();
 
-            // Actualizar UI
             pttBtn.classList.add('ptt-active');
             lcdModeBadge.textContent = 'TX ACTIVE';
             lcdModeBadge.className = 'bg-red-500 text-white px-1.5 py-0.5 rounded text-[10px] font-bold animate-pulse';
@@ -600,7 +602,7 @@
 
                 drawVisualizerBars();
 
-                // Transmitir voz a los demás dispositivos en este canal
+                // Llamar de inmediato a todos los pares detectados en el canal
                 channelPeers.forEach((cs, targetPeerId) => {
                     const call = peer.call(targetPeerId, localStream);
                     activeCalls[targetPeerId] = call;
@@ -629,7 +631,6 @@
                 cancelAnimationFrame(visualizerAnimId);
             }
 
-            // Desconectar llamadas activas
             Object.keys(activeCalls).forEach(pId => {
                 if (activeCalls[pId]) {
                     activeCalls[pId].close();
@@ -637,7 +638,6 @@
                 }
             });
 
-            // UI Reset
             pttBtn.classList.remove('ptt-active');
             lcdModeBadge.textContent = 'RX READY';
             lcdModeBadge.className = 'bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded text-[10px] font-bold';
@@ -783,7 +783,6 @@
                 if (val) {
                     addLogEntry(myCallsign, val, 'tx');
                     
-                    // Transmitir por WebRTC DataChannel y BroadcastChannel
                     channelPeers.forEach((cs, targetPeerId) => {
                         if (peer) {
                             const conn = peer.connect(targetPeerId);
@@ -807,7 +806,6 @@
             });
         }
 
-        // Registrar entrada en el panel de auditoría
         function addLogEntry(tag, message, type = 'system') {
             const now = new Date();
             const timeStr = now.toTimeString().split(' ')[0];
