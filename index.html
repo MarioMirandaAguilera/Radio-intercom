@@ -271,6 +271,7 @@
         let myPeerId = null;
         let peer = null;
         let activeCalls = {};
+        let activeDataConns = {};
         let channelPeers = new Map(); // Guardar pares (peerId => callsign)
         let localStream = null;
         let isTransmitting = false;
@@ -330,7 +331,9 @@
             channelPeers.clear();
             updateActiveUsersUI();
 
-            const fullPeerId = `nexus-comm-v1-ch${channelId}-${myCallsign}`;
+            // ID único basado en sello de tiempo para prevenir colisiones entre pestañas
+            const uniqueId = Math.random().toString(36).substring(2, 7);
+            const fullPeerId = `nexus-ch${channelId}-${myCallsign}-${uniqueId}`;
 
             if (peer) {
                 peer.destroy();
@@ -355,6 +358,11 @@
                 handleIncomingStream(call);
             });
 
+            // Recibir mensajes de texto por WebRTC DataChannel
+            peer.on('connection', (conn) => {
+                setupDataConnection(conn);
+            });
+
             peer.on('error', (err) => {
                 if (err.type === 'unavailable-id') {
                     myCallsign = 'ESTACION-' + Math.floor(100 + Math.random() * 900);
@@ -364,7 +372,20 @@
             });
         }
 
-        // Sincronizar presencia de usuarios mediante BroadcastChannel
+        function setupDataConnection(conn) {
+            activeDataConns[conn.peer] = conn;
+            conn.on('data', (data) => {
+                if (data.type === 'ALERT') {
+                    addLogEntry(data.callsign, data.text, 'tx');
+                    playToneSound(1200, 0.1, 'triangle');
+                }
+            });
+            conn.on('close', () => {
+                delete activeDataConns[conn.peer];
+            });
+        }
+
+        // Sincronizar presencia de usuarios mediante BroadcastChannel local y mensajes globales
         function syncBroadcastPresence() {
             const channelName = `nexus_comm_bc_ch_${currentChannelId}`;
             const bc = new BroadcastChannel(channelName);
@@ -396,7 +417,8 @@
         // Manejar audio entrante de un peer
         function handleIncomingStream(call) {
             activeCalls[call.peer] = call;
-            const callerCallsign = call.peer.split('-').pop() || 'OPERADOR';
+            const parts = call.peer.split('-');
+            const callerCallsign = parts.length > 2 ? parts[2] : 'OPERADOR';
 
             call.on('stream', (remoteStream) => {
                 let audioEl = document.getElementById('audio-' + call.peer);
@@ -761,7 +783,16 @@
                 if (val) {
                     addLogEntry(myCallsign, val, 'tx');
                     
-                    // Transmitir mensaje por BroadcastChannel
+                    // Transmitir por WebRTC DataChannel y BroadcastChannel
+                    channelPeers.forEach((cs, targetPeerId) => {
+                        if (peer) {
+                            const conn = peer.connect(targetPeerId);
+                            conn.on('open', () => {
+                                conn.send({ type: 'ALERT', callsign: myCallsign, text: val });
+                            });
+                        }
+                    });
+
                     const bc = new BroadcastChannel(`nexus_comm_bc_ch_${currentChannelId}`);
                     bc.postMessage({ type: 'ALERT', callsign: myCallsign, text: val });
 
